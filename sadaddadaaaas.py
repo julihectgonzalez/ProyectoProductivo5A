@@ -39,29 +39,17 @@ class SistemaInventario:
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
         self.tab_disponibles = tk.Frame(self.notebook, bg="#f4f4f4")
-        self.tab_danados = tk.Frame(self.notebook, bg="#f4f4f4") # <--- Nueva
         self.tab_inventario = tk.Frame(self.notebook, bg="#f4f4f4")
         self.tab_registro = tk.Frame(self.notebook, bg="#f4f4f4")
         
         self.notebook.add(self.tab_registro, text=" ➕ AGREGAR ARTÍCULO ")
         self.notebook.add(self.tab_disponibles, text=" 📦 ARTÍCULOS DISPONIBLES ")
-        self.notebook.add(self.tab_danados, text=" ❌ ARTÍCULOS DAÑADOS ") # <--- Nueva
         self.notebook.add(self.tab_inventario, text=" 📋 HISTORIAL COMPLETO ")
 
         self.setup_tab_disponibles()
         self.setup_tab_inventario()
         self.setup_tab_registro()
         self.cargar_datos()
-        self.setup_tab_danados()
-
-# --- PESTAÑA: ARTÍCULOS DAÑADOS ---
-    def setup_tab_danados(self):
-        cols = ("CÓDIGO", "ARTÍCULO", "CANT. DAÑADA")
-        self.tab_danados = ttk.Treeview(self.tab_danados, columns=cols, show="headings")
-        for col in cols:
-            self.tab_danados.heading(col, text=col)
-            self.tab_danados.column(col, anchor="center")
-        self.tab_danados.pack(fill="both", expand=True, padx=20, pady=20)
 
     # --- PESTAÑA 1: DISPONIBLES ---
     def setup_tab_disponibles(self):
@@ -90,8 +78,6 @@ class SistemaInventario:
         
         tk.Button(frame_btns, text="➕ DEVOLVER ARTÍCULO", command=lambda: self.ventana_movimiento("SUMAR"), 
                   bg="#28a745", fg="white", font=("Arial", 11, "bold"), width=25, pady=10).pack(side="right", padx=100)
-        tk.Button(frame_btns, text="⚠️ REPORTAR DAÑO", command=lambda: self.ventana_movimiento("DAÑADO"), 
-                  bg="#dc3545", fg="white", font=("Arial", 11, "bold"), width=25, pady=10).pack(side="left", padx=10)
 
     # --- VENTANA EMERGENTE PERSONALIZADA ---
     def ventana_movimiento(self, tipo):
@@ -121,7 +107,7 @@ class SistemaInventario:
         tk.Label(v, text="\nCantidad:").pack(anchor="w")
         ent_c = tk.Entry(v, font=("Arial", 11)); ent_c.pack(fill="x")
         
-        tk.Label(v, text="\nObservación/Motivo:").pack(anchor="w")
+        tk.Label(v, text="\nDescripción/Motivo:").pack(anchor="w")
         ent_d = tk.Entry(v, font=("Arial", 11)); ent_d.pack(fill="x")
         
         tk.Label(v, text="\nNombre del Responsable:").pack(anchor="w")
@@ -158,43 +144,11 @@ class SistemaInventario:
             except:
                 messagebox.showerror("Error", "Verifique que la cantidad sea un número válido.")
 
-            try:
-                cantidad = int(ent_c.get().strip())
-                desc = ent_d.get().strip()
-                resp = ent_r.get().strip()
-
-                if cantidad <= 0: raise ValueError
-                
-                if tipo == "RESTAR" or tipo == "DAÑADO":
-                    if cantidad > stock_actual:
-                        messagebox.showerror("Error", f"No hay suficiente stock. Disponible: {stock_actual}")
-                        return
-                    # Si es daño, guardamos la observación específica
-                    if tipo == "DAÑADO":
-                        desc = f"DAÑADO: {desc}"
-                    cantidad = -cantidad
-                
-                # Guardar en la tabla principal (esto resta del stock disponible)
-                fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
-                conn = sqlite3.connect("sistema_completo.db")
-                conn.execute("""
-                    INSERT INTO inventario (codigo, articulo, descripcion, cantidad, solicitado, fecha_hora)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (cod, art, desc, cantidad, resp, fecha))
-                conn.commit()
-                conn.close()
-                
-                self.cargar_datos()
-                v.destroy()
-                messagebox.showinfo("Éxito", "Estado actualizado correctamente.")
-            except:
-                messagebox.showerror("Error", "Verifique los datos ingresados.")
-
         tk.Button(v, text="CONFIRMAR", bg=color, fg="white", font=("Arial", 11, "bold"), command=procesar).pack(pady=30, fill="x")
 
     # --- PESTAÑA 2: HISTORIAL ---
     def setup_tab_inventario(self):
-        columnas = ("ID", "CÓDIGO", "ARTÍCULO", "CANT", "DESCRIPCIÓN", "SOLICITADO", "FECHA/HORA")
+        columnas = ("ID", "CÓDIGO", "ARTÍCULO", "CANT", "DESCRIPCIÓN", "FECHA/HORA", "SOLICITADO")
         self.tabla_hist = ttk.Treeview(self.tab_inventario, columns=columnas, show="headings")
         for col in columnas:
             self.tabla_hist.heading(col, text=col)
@@ -221,19 +175,12 @@ class SistemaInventario:
 
     def alta_nueva(self):
         desc = simpledialog.askstring("Descripción", "Descripción inicial del artículo:")
-        if desc is not None: # Verifica que no se haya dado a "Cancelar"
+        if desc:
             try:
                 cod = self.inputs["Código"].get()
                 art = self.inputs["Artículo"].get()
-                can_str = self.inputs["Cantidad"].get()
-                
-                # Validación manual para identificar mejor el error
-                if not cod or not art or not can_str:
-                    messagebox.showwarning("Atención", "Todos los campos son obligatorios.")
-                    return
-                
-                can = int(can_str)
-                resp = "ADMIN/INICIAL" # Valor por defecto ya que no hay input de responsable
+                can = int(self.inputs["Cantidad"].get())
+                resp = self.inputs["Responsable"].get()
                 fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
                 
                 conn = sqlite3.connect("sistema_completo.db")
@@ -241,57 +188,31 @@ class SistemaInventario:
                             (cod, art, desc, can, resp, fecha))
                 conn.commit()
                 conn.close()
-                
-                # Limpiar campos tras guardar
-                for entry in self.inputs.values():
-                    entry.delete(0, tk.END)
-                
                 self.cargar_datos()
-                messagebox.showinfo("Éxito", "Artículo añadido.")
-            except ValueError:
-                messagebox.showerror("Error", "La cantidad debe ser un número entero válido.")
-            except Exception as e:
-                messagebox.showerror("Error", f"Ocurrió un error inesperado: {e}")
+                messagebox.showinfo("Éxito", "Artículo dado de alta.")
+            except: messagebox.showerror("Error", "Revisar cantidad.")
 
     # --- CARGA DE DATOS ---
     def cargar_datos(self):
-        # 1. Limpiar y Cargar Historial
+        # Historial
         for i in self.tabla_hist.get_children(): self.tabla_hist.delete(i)
         conn = sqlite3.connect("sistema_completo.db")
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM inventario ORDER BY id DESC")
         for fila in cursor.fetchall(): self.tabla_hist.insert("", tk.END, values=fila)
         
-        # 2. Búsqueda y Disponibles
+        # Disponibles
         for i in self.tabla_disp.get_children(): self.tabla_disp.delete(i)
-        
-        # Obtenemos el texto de la barra de búsqueda
         busqueda = self.ent_busqueda.get()
-        param = f'%{busqueda}%'
-        
-        # SQL modificado para buscar en CÓDIGO o en ARTÍCULO
         cursor.execute("""
             SELECT codigo, articulo, SUM(cantidad) 
             FROM inventario 
-            WHERE codigo LIKE ? OR articulo LIKE ?
-            GROUP BY codigo, articulo
-        """, (param, param))
-        
-        for fila in cursor.fetchall(): 
-            self.tabla_disp.insert("", tk.END, values=fila)
-
-        for i in self.tab_danados.get_children(): self.tab_danados.delete(i)
-        cursor.execute("""
-            SELECT codigo, articulo, ABS(SUM(cantidad)) 
-            FROM inventario 
-            WHERE descripcion LIKE 'DAÑADO:%'
-            GROUP BY codigo, articulo
-        """)
-        for fila in cursor.fetchall(): 
-            self.tab_danados.insert("", tk.END, values=fila)
-        
+            WHERE codigo LIKE ? 
+            GROUP BY codigo
+        """, (f'%{busqueda}%',))
+        for fila in cursor.fetchall(): self.tabla_disp.insert("", tk.END, values=fila)
         conn.close()
-        
+
     def borrar(self):
         sel = self.tabla_hist.selection()
         if not sel: return
@@ -304,74 +225,7 @@ class SistemaInventario:
             self.cargar_datos()
 
 if __name__ == "__main__":
- class Login:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Inicio de Sesión - Fe y Alegría")
-        self.root.geometry("1100x750")
-        self.root.configure(bg="white")
-        
-        # Alpha inicial para el fade in
-        self.alpha = 0.0
-        self.root.attributes("-alpha", 0.0)
-        
-        # Contenedor principal
-        self.main_frame = tk.Frame(self.root, bg="white")
-        self.main_frame.place(relx=0.5, rely=0.5, anchor="center")
-        
-        # Logo
-        try:
-            self.img = tk.PhotoImage(file="logorecortado.png")
-            self.logo_label = tk.Label(self.main_frame, image=self.img, bg="white")
-            self.logo_label.pack(pady=20)
-        except:
-            tk.Label(self.main_frame, text="[ LOGO ]", font=("Arial", 25, "bold"), fg="#da251d", bg="white").pack(pady=20)
-
-        # Campos de entrada
-        tk.Label(self.main_frame, text="USUARIO", font=("Arial", 10, "bold"), bg="white", fg="#da251d").pack()
-        self.ent_user = tk.Entry(self.main_frame, font=("Arial", 12), justify="center", highlightthickness=1, highlightbackground="#da251d", relief="flat")
-        self.ent_user.pack(pady=5, ipady=3)
-
-        tk.Label(self.main_frame, text="\nCONTRASEÑA", font=("Arial", 10, "bold"), bg="white", fg="#da251d").pack()
-        self.ent_pass = tk.Entry(self.main_frame, font=("Arial", 12), show="*", justify="center", highlightthickness=1, highlightbackground="#da251d", relief="flat")
-        self.ent_pass.pack(pady=5, ipady=3)
-
-        # Botón
-        tk.Button(self.main_frame, text="INICIAR SESIÓN", bg="#da251d", fg="white", font=("Arial", 11, "bold"), 
-                  command=self.validar, width=20, cursor="hand2", relief="flat").pack(pady=30)
-
-        self.fade_in()
-
-    def fade_in(self):
-        if self.alpha < 1.0:
-            self.alpha += 0.05
-            self.root.attributes("-alpha", self.alpha)
-            self.root.after(30, self.fade_in)
-
-    def fade_out(self, callback):
-        if self.alpha > 0.0:
-            self.alpha -= 0.05
-            self.root.attributes("-alpha", self.alpha)
-            self.root.after(20, lambda: self.fade_out(callback))
-        else:
-            callback()
-
-    def validar(self):
-        if self.ent_user.get() == "admin" and self.ent_pass.get() == "1234":
-            self.fade_out(self.abrir_sistema)
-        else:
-            messagebox.showerror("Error", "Usuario o contraseña incorrectos")
-
-    def abrir_sistema(self):
-        for widget in self.root.winfo_children():
-            widget.destroy()
-        self.root.attributes("-alpha", 1.0)
-        SistemaInventario(self.root)
-
-# --- INICIO DE LA APLICACIÓN ---
-if __name__ == "__main__":
     inicializar_db()
     root = tk.Tk()
-    # Iniciamos con el Login, el cual luego llamará a SistemaInventario
-    Login(root)
+    SistemaInventario(root)
     root.mainloop()
